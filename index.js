@@ -1,12 +1,21 @@
-const express = require("express");
-const app = express();
+const { Configuration, OpenAIApi } = require("openai");
 require("dotenv").config();
-const PORT = process.env.PORT;
 
-app.get("/", (req, res) => {
-  res.send("Hello, Backend!");
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+const openai = new OpenAIApi(configuration);
+
+(async () => {
+  try {
+    const response = await openai.createCompletion({
+      model: "text-davinci-003",
+      prompt: "Hello, world!",
+      max_tokens: 50,
+    });
+    console.log(response.data.choices[0].text);
+  } catch (error) {
+    console.error("OpenAI API error:", error);
+  }
+})();
