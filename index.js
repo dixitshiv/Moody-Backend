@@ -7,7 +7,6 @@ const bcrypt = require("bcryptjs");
 const { MongoClient, ObjectId } = require("mongodb");
 const cors = require("cors");
 
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 const mongoURI = process.env.MONGO_URI;
@@ -166,27 +165,76 @@ app.put("/api/profile", async (req, res) => {
 });
 
 // Posts Routes
-app.post("/api/posts", async (req, res) => {
+// Middleware to ensure user is authenticated
+function ensureAuthenticated(req, res, next) {
   if (req.isAuthenticated()) {
-    const { title, content } = req.body;
-    try {
-      const newPost = { userId: req.user._id, title, content, date: new Date() };
-      await postsCollection.insertOne(newPost);
-      res.status(201).json({ message: "Post created successfully" });
-    } catch (err) {
-      res.status(500).json({ message: "Error creating post", error: err });
-    }
+    return next();
   } else {
     res.status(401).json({ message: "Not authenticated" });
   }
+}
+
+app.post("/api/posts", ensureAuthenticated, async (req, res) => {
+  const { title, content } = req.body;
+  try {
+    const newPost = { userId: req.user._id, title, content, date: new Date() };
+    await postsCollection.insertOne(newPost);
+    res.status(201).json({ message: "Post created successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Error creating post", error: err });
+  }
 });
 
-app.get("/api/posts", async (req, res) => {
+app.get("/api/posts", ensureAuthenticated, async (req, res) => {
   try {
-    const posts = await postsCollection.find({ userId: req.user ? new ObjectId(req.user._id) : null }).toArray();
-    res.status(200).json(posts);
-  } catch (err) {
-    res.status(500).json({ message: "Error fetching posts", error: err });
+    const posts = await postsCollection.find().toArray();
+    res.json(posts);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching posts", error });
+  }
+});
+
+app.put("/api/posts/:id/like", ensureAuthenticated, async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const result = await postsCollection.updateOne(
+      { _id: new ObjectId(postId) },
+      { $inc: { likes: 1 } }
+    );
+
+    if (result.modifiedCount === 1) {
+      res.json({ message: "Post liked" });
+    } else {
+      res.status(404).json({ message: "Post not found" });
+    }
+  } catch (error) {
+    res.status(400).json({ message: "Error liking post", error });
+  }
+});
+
+app.post("/api/posts/:id/comment", ensureAuthenticated, async (req, res) => {
+  try {
+    const postId = req.params.id;
+    const { text } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ message: "Comment text is required" });
+    }
+
+    const newComment = { text };
+
+    const result = await postsCollection.updateOne(
+      { _id: new ObjectId(postId) },
+      { $push: { comments: newComment } }
+    );
+
+    if (result.modifiedCount === 1) {
+      res.json({ message: "Comment added" });
+    } else {
+      res.status(404).json({ message: "Post not found" });
+    }
+  } catch (error) {
+    res.status(400).json({ message: "Error adding comment", error });
   }
 });
 
